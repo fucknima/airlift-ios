@@ -26,7 +26,7 @@ jobs:
           path: |
             Vendor/idevice
             .build/idevice/target
-          key: idevice-ffi-8970209-afc-tunnel-ring-v1
+          key: idevice-ffi-8970209-afc-tunnel-ring-v2
 
       - name: rust
         shell: bash
