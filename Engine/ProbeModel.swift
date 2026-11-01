@@ -189,47 +189,47 @@ final class ProbeModel: ObservableObject {
     func probeZip() {
         guard !busy else { return }
         busy = true
-        log("探测 shim: RSDCheckin + StartService")
+        log("探测 zip: go-ios initTransfer")
         Task.detached { [link] in
             do {
                 let shim = "com.apple.streaming_zip_conduit.shim.remote"
-                let plain = shim.replacingOccurrences(of: ".shim.remote", with: "")
                 guard let port = try link.port(of: shim) else { throw LinkError.shim("没有 zip shim") }
                 let result = try link.withAdapter { adapter -> String in
+                    let initMsg: [String: Any] = [
+                        "InstallOptionsDictionary": [
+                            "DisableDeltaTransfer": 1,
+                            "InstallDeltaTypeKey": "InstallDeltaTypeSparseIPAFiles",
+                            "IsUserInitiated": 1,
+                            "PackageType": "Customer",
+                            "PreferWifi": 1,
+                        ],
+                        "InstallTransferredDirectory": 1,
+                        "MediaSubdir": "PublicStaging/airlift-probe",
+                        "UserInitiatedTransfer": 0,
+                    ]
                     var report: [String] = []
-                    for candidate in [plain, shim] {
+                    for withStart in [false, true] {
                         let stream = try ShimStream(adapter: adapter, port: port)
-                        let label = "airlift"
-                        var checkin: [String: Any] = ["Label": label, "ProtocolVersion": 2, "Request": "RSDCheckin"]
+                        var checkin: [String: Any] = ["Label": "airlift", "ProtocolVersion": 2, "Request": "RSDCheckin"]
                         try stream.send(try PlistFrame.encode(checkin))
                         _ = try stream.recvFrame()
-                        checkin["Request"] = "StartService"
-                        checkin["Service"] = candidate
-                        try stream.send(try PlistFrame.encode(checkin))
+                        if withStart {
+                            checkin["Request"] = "StartService"
+                            checkin["Service"] = shim
+                            try stream.send(try PlistFrame.encode(checkin))
+                            _ = try stream.recvFrame()
+                        }
+                        try stream.send(try PlistFrame.encode(initMsg))
                         let reply = try stream.recvFrame()
-                        guard let object = PlistFrame.decode(reply) as? [String: Any] else {
-                            report.append("\(candidate): hex \(Hex.dump(reply))")
-                            stream.close()
-                            continue
-                        }
-                        if let rawPort = object["Port"] as? Int, rawPort > 0, rawPort < 65536 {
-                            let next = try ShimStream(adapter: adapter, port: UInt16(rawPort))
-                            try next.send(try PlistFrame.encode(["Version": 1, "MediaSubdir": "airlift-probe"]))
-                            let body = try next.recvFrame()
-                            report.append("\(candidate): port=\(rawPort) reply=\(PlistFrame.decode(body).map { "\($0)" } ?? Hex.dump(body))")
-                            next.close()
-                        } else {
-                            try stream.send(try PlistFrame.encode(["Version": 1, "MediaSubdir": "airlift-probe"]))
-                            let body = try stream.recvFrame()
-                            report.append("\(candidate): samePort reply=\(PlistFrame.decode(body).map { "\($0)" } ?? Hex.dump(body))")
-                        }
+                        let text = PlistFrame.decode(reply).map { "\($0)" } ?? Hex.dump(reply)
+                        report.append(withStart ? "start+init: \(text)" : "init: \(text)")
                         stream.close()
                     }
                     return report.joined(separator: " | ")
                 }
-                await MainActor.run { self.log("shim 探测: \(result)"); self.busy = false }
+                await MainActor.run { self.log("zip 探测: \(result)"); self.busy = false }
             } catch {
-                await MainActor.run { self.log("shim 探测失败: \(error.localizedDescription)"); self.busy = false }
+                await MainActor.run { self.log("zip 探测失败: \(error.localizedDescription)"); self.busy = false }
             }
         }
     }
