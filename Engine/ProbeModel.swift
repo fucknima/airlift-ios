@@ -168,7 +168,7 @@ final class ProbeModel: ObservableObject {
                         "Request": "RSDCheckin",
                     ]
                     try stream.send(try PlistFrame.encode(checkin))
-                    let reply = try stream.recv(timeout: 3000)
+                    let reply = try stream.recvFrame()
                     if reply.isEmpty { return "checkin 无回应" }
                     guard let object = PlistFrame.decode(reply) else {
                         return "checkin hex=\(Hex.dump(reply))"
@@ -178,12 +178,12 @@ final class ProbeModel: ObservableObject {
                         let next = try ShimStream(adapter: adapter, port: UInt16(rawPort))
                         defer { next.close() }
                         try next.send(try PlistFrame.encode(["MediaSubdir": "airlift-probe"]))
-                        let ack = try next.recv(timeout: 3000)
+                        let ack = try next.recvFrame()
                         let body = ack.isEmpty ? "silent" : (PlistFrame.decode(ack).map { "\($0)" } ?? Hex.dump(ack))
                         return "checkin=\(dict) nextPort=\(rawPort) zip=\(body)"
                     }
                     try stream.send(try PlistFrame.encode(["MediaSubdir": "airlift-probe"]))
-                    let ack = try stream.recv(timeout: 3000)
+                    let ack = try stream.recvFrame()
                     let body = ack.isEmpty ? "silent" : (PlistFrame.decode(ack).map { "\($0)" } ?? Hex.dump(ack))
                     return "checkin=\(dict) samePort zip=\(body)"
                 }

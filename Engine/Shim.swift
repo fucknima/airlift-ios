@@ -31,6 +31,24 @@ final class ShimStream {
         if let error { throw LinkError.shim(FFI.message(error, "send") ?? "send failed") }
     }
 
+    /// Reads one 4-byte big-endian length frame, header and body.
+    func recvFrame(timeout: UInt64 = 3000) throws -> Data {
+        var buffer = Data()
+        while buffer.count < 4 {
+            let chunk = try recv(timeout: buffer.isEmpty ? timeout : 500)
+            if chunk.isEmpty { throw LinkError.shim("frame header timeout") }
+            buffer.append(chunk)
+        }
+        let length = Int(buffer.prefix(4).withUnsafeBytes { $0.load(as: UInt32.self).bigEndian })
+        guard length > 0, length < 1_000_000 else { throw LinkError.shim("bad frame length \(length)") }
+        while buffer.count < 4 + length {
+            let chunk = try recv(timeout: timeout)
+            if chunk.isEmpty { throw LinkError.shim("frame body timeout \(buffer.count)/\(4 + length)") }
+            buffer.append(chunk)
+        }
+        return buffer
+    }
+
     func recv(timeout: UInt64 = 0, max: Int = 8192) throws -> Data {
         if timeout > 0 {
             guard let handle else { throw LinkError.shim("closed") }

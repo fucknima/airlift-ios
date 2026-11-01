@@ -29,13 +29,13 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kestrel.airlift
         PRODUCT_NAME: Airlift
-        MARKETING_VERSION: "0.1.4"
-        CURRENT_PROJECT_VERSION: "5"
+        MARKETING_VERSION: "0.1.5"
+        CURRENT_PROJECT_VERSION: "6"
         INFOPLIST_FILE: App/Info.plist
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
         GENERATE_INFOPLIST_FILE: false
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SUPPORTS_MACCATALYST: NO
         ENABLE_BITCODE: NO
         LIBRARY_SEARCH_PATHS:
