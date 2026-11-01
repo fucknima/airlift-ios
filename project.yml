@@ -1,0 +1,50 @@
+name: Airlift
+options:
+  bundleIdPrefix: com.kestrel
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: ""
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+targets:
+  Airlift:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes:
+          - "Info.plist"
+      - path: Engine
+      - path: Resources
+      - path: Vendor/idevice/module.modulemap
+        buildPhase: none
+      - path: Vendor/idevice/idevice.h
+        buildPhase: none
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kestrel.airlift
+        PRODUCT_NAME: Airlift
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/Airlift.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        GENERATE_INFOPLIST_FILE: false
+        SUPPORTS_MACCATALYST: NO
+        ENABLE_BITCODE: NO
+        LIBRARY_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(PROJECT_DIR)/Vendor/idevice"
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-lidevice_ffi"
+          - "-lc++"
+          - "-lz"
+        SWIFT_INCLUDE_PATHS: "$(PROJECT_DIR)/Vendor/idevice"
+        HEADER_SEARCH_PATHS: "$(PROJECT_DIR)/Vendor/idevice"

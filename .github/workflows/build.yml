@@ -1,0 +1,19 @@
+name: build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: xcodegen
+        run: brew install xcodegen
+      - name: build
+        run: ./scripts/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: airlift-unsigned-ipa
+          path: Airlift-unsigned.ipa

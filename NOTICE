@@ -1,0 +1,25 @@
+airlift-ios
+Copyright (c) 2026 KESTREL, MIT.
+
+Third-party work:
+
+Locus
+  https://github.com/ChrisMack32/Locus
+  Copyright (c) Chris Mack, MIT.
+  Pairing host glue, pairable host advertiser, pairing store shape, local
+  tunnel checks, background audio pattern adapted in Engine/.
+
+idevice
+  https://github.com/jkcoxson/idevice
+  Copyright (c) jkcoxson, MIT.
+  Used as a prebuilt static library and C header, fetched by
+  scripts/fetch-ffi.sh. RPPairing, RSD, AFC, tunnel.
+
+airlift
+  https://github.com/0xjohnnydev/airlift
+  Copyright (c) 0xjohnnydev, MIT.
+  Protocol reference only. No source copied.
+
+LocalDevVPN
+  https://apps.apple.com/us/app/localdevvpn/id6755608044
+  Coxson Engineering LLC. External dependency, not bundled.

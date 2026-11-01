@@ -1,0 +1,11 @@
+build/
+dist/
+DerivedData/
+*.ipa
+*.xcuserstate
+xcuserdata/
+.DS_Store
+Vendor/idevice/idevice.h
+Vendor/idevice/libidevice_ffi.a
+Vendor/idevice/libidevice_ffi.a.part
+Airlift.xcodeproj/
