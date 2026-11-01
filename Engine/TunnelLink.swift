@@ -57,36 +57,36 @@ final class TunnelLink: @unchecked Sendable {
             guard let pairing else { throw LinkError.record("empty handle") }
             record = pairing
 
-            var outAdapter: OpaquePointer?
-            var outHandshake: OpaquePointer?
-            guard let result = FFI.withSockaddr(host, port: port, { address, length in
-                hostname.withCString { name in
-                    tunnel_create_rppairing(
-                        address,
-                        length,
-                        name,
-                        pairing,
-                        nil,
-                        nil,
-                        &outAdapter,
-                        &outHandshake
-                    )
+            var failure = "no adapter"
+            for remoteXPC in [false, true] {
+                var outAdapter: OpaquePointer?
+                var outHandshake: OpaquePointer?
+                guard let result = FFI.withSockaddr(host, port: port, { address, length in
+                    hostname.withCString { name in
+                        if remoteXPC {
+                            return tunnel_create_remotexpc(address, length, name, pairing,
+                                                           nil, nil, &outAdapter, &outHandshake)
+                        }
+                        return tunnel_create_rppairing(address, length, name, pairing,
+                                                       nil, nil, &outAdapter, &outHandshake)
+                    }
+                }) else {
+                    throw LinkError.tunnel("bad address \(host)")
                 }
-            }) else {
-                throw LinkError.tunnel("bad address \(host)")
+
+                if let error = result {
+                    failure = FFI.message(error, remoteXPC ? "remotexpc" : "rppairing") ?? "create failed"
+                    continue
+                }
+                guard let outAdapter, let outHandshake else { continue }
+                adapter = outAdapter
+                handshake = outHandshake
+
+                // pair-verify can refresh the record; write it back.
+                _ = store.path.withCString { rp_pairing_file_write(pairing, $0) }
+                return try servicesOnQueue()
             }
-
-            if let error = result {
-                throw LinkError.tunnel(FFI.message(error, "create") ?? "create failed")
-            }
-            guard let outAdapter, let outHandshake else { throw LinkError.tunnel("no adapter") }
-            adapter = outAdapter
-            handshake = outHandshake
-
-            // pair-verify can refresh the record; write it back.
-            _ = store.path.withCString { rp_pairing_file_write(pairing, $0) }
-
-            return try servicesOnQueue()
+            throw LinkError.tunnel(failure)
         }
     }
 

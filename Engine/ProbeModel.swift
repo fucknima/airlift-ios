@@ -29,6 +29,7 @@ final class ProbeModel: ObservableObject {
         guard !started else { return }
         started = true
         candidates = EndpointProbe.candidates()
+        pairing.onEvent = { [weak self] text in self?.log(text) }
         refresh()
     }
 
@@ -89,6 +90,10 @@ final class ProbeModel: ObservableObject {
         busy = true
         error = nil
         log("隧道目标 \(endpoint.label)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+            guard let self, self.busy else { return }
+            self.log("20 秒仍未完成握手，这个端口可能不是 RPPairing 服务")
+        }
         Task.detached { [link, store] in
             let probe = EndpointProbe.tcp(endpoint)
             await MainActor.run { self.log("探测结果: \(probe)") }
@@ -147,7 +152,10 @@ final class ProbeModel: ObservableObject {
         do {
             try store.importRecord(from: url)
             refresh()
+            pairing.reset()
             log("配对记录已导入，\(recordSize) 字节")
+            log("记录字段: \(store.describe())")
+            connect()
         } catch {
             self.error = error.localizedDescription
             log("导入失败: \(error.localizedDescription)")
@@ -159,7 +167,10 @@ final class ProbeModel: ObservableObject {
         do {
             try store.importRecord(from: text)
             refresh()
+            pairing.reset()
             log("配对记录已从剪贴板导入，\(recordSize) 字节")
+            log("记录字段: \(store.describe())")
+            connect()
         } catch {
             self.error = error.localizedDescription
             log("剪贴板导入失败: \(error.localizedDescription)")

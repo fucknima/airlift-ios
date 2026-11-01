@@ -43,6 +43,20 @@ final class PairingStore: @unchecked Sendable {
         throw StoreError.invalidRecord
     }
 
+    /// Key names and sizes only, so the log proves the record type without
+    /// dumping key material.
+    func describe() -> String {
+        guard let data = try? Data(contentsOf: url),
+              let plist = (try? PropertyListSerialization.propertyList(from: data, options: [], format: nil)) as? [String: Any] else {
+            return "无法解析"
+        }
+        return plist.keys.sorted().map { key in
+            if let value = plist[key] as? Data { return "\(key)=\(value.count)B" }
+            if let value = plist[key] as? String { return "\(key)=\(value.prefix(10))" }
+            return key
+        }.joined(separator: " ")
+    }
+
     func remove() throws {
         if exists { try fm.removeItem(at: url) }
     }

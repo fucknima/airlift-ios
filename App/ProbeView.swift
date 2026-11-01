@@ -42,6 +42,9 @@ struct ProbeView: View {
 
                     Button("导入配对文件") { model.showPicker = true }
                     Button("从剪贴板导入") { model.importClipboard() }
+                    Text("导入成功后会自动探测并连接")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     if model.hasRecord {
                         Button("删除配对记录", role: .destructive) { model.removeRecord() }
                     }
@@ -70,12 +73,11 @@ struct ProbeView: View {
                             }
                         }
                     }
-                    Button("保存并检测端口") { model.probe() }
+                    Button("① 保存并检测端口") { model.probe() }
                         .disabled(model.busy)
-                    Button("连接并列出服务") { model.connect() }
+                    Button("② 连接并列出服务") { model.connect() }
                         .disabled(model.busy)
-                    Button("读取 AFC 设备信息") { model.runAFC() }
-                        .disabled(model.busy)
+                        .bold()
                     if model.busy {
                         HStack(spacing: 8) {
                             ProgressView()
@@ -86,6 +88,20 @@ struct ProbeView: View {
                     Text("回环地址")
                 } footer: {
                     Text("填你自己的回环工具给出的地址和端口。候选地址只是本机的 IPv4，不保证正确。")
+                }
+
+                Section {
+                    Button("③ 读取 AFC 设备信息") { model.runAFC() }
+                        .disabled(model.busy || model.services.isEmpty)
+                    if model.services.isEmpty {
+                        Text("先完成第 ② 步")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("验证")
+                } footer: {
+                    Text("AFC 能读出机型和剩余空间，说明隧道被系统当作已授权的 host。")
                 }
 
                 if !model.services.isEmpty {

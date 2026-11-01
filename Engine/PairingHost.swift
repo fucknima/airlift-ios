@@ -31,6 +31,7 @@ final class PairingHost: ObservableObject {
     private var task: UIBackgroundTaskIdentifier = .invalid
     private var cancelToken: OpaquePointer?
     private let box = CallbackBox()
+    var onEvent: ((String) -> Void)?
 
     var busy: Bool {
         switch phase {
@@ -43,12 +44,18 @@ final class PairingHost: ObservableObject {
         guard !busy else { return }
         phase = .advertising
         pin = nil
+        onEvent?("配对广播已启动，等待设备发现")
         box.owner = self
         audio.start()
         keepAwake()
 
         let token = pairable_host_cancel_new()
         cancelToken = token
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 25) { [weak self] in
+            guard let self, case .advertising = self.phase else { return }
+            self.onEvent?("25 秒没有配对面板，广播可能没有被系统发现")
+        }
 
         let output = store.path
         let box = self.box
@@ -61,6 +68,7 @@ final class PairingHost: ObservableObject {
     }
 
     func reset() {
+        box.owner = nil
         if let cancelToken {
             pairable_host_cancel_signal(cancelToken)
             pairable_host_cancel_free(cancelToken)
@@ -73,12 +81,14 @@ final class PairingHost: ObservableObject {
     }
 
     fileprivate func received(pin value: String) {
+        onEvent?("设备已连接，配对码已生成")
         pin = value
         phase = .awaitingPIN(value)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
     fileprivate func finished() {
+        onEvent?("配对完成，记录已写入")
         releaseCancel()
         pin = nil
         phase = .paired
@@ -87,6 +97,7 @@ final class PairingHost: ObservableObject {
     }
 
     fileprivate func failed(_ message: String) {
+        onEvent?("配对失败: \(message)")
         releaseCancel()
         pin = nil
         phase = .failed(message)

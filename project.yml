@@ -29,8 +29,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kestrel.airlift
         PRODUCT_NAME: Airlift
-        MARKETING_VERSION: "0.1.1"
-        CURRENT_PROJECT_VERSION: "2"
+        MARKETING_VERSION: "0.1.2"
+        CURRENT_PROJECT_VERSION: "3"
         INFOPLIST_FILE: App/Info.plist
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
