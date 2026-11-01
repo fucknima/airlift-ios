@@ -32,8 +32,20 @@ echo "cargo build $FEATURES"
 cd "$SRC/ffi"
 cargo build --release --no-default-features --features "$FEATURES" --target aarch64-apple-ios
 
-cp "$SRC/ffi/target/aarch64-apple-ios/release/libidevice_ffi.a" "$DEST/"
-cp "$SRC/ffi/idevice.h" "$DEST/"
+TARGET_DIR="$(cargo metadata --format-version 1 --no-deps | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')"
+LIB="$TARGET_DIR/aarch64-apple-ios/release/libidevice_ffi.a"
+HEADER="$SRC/ffi/idevice.h"
+if [ ! -s "$LIB" ]; then
+  echo "static library not produced at $LIB" >&2
+  find "$TARGET_DIR" -name 'libidevice_ffi.a' -print 2>/dev/null | head
+  exit 1
+fi
+if [ ! -s "$HEADER" ]; then
+  echo "header not produced at $HEADER" >&2
+  exit 1
+fi
+cp "$LIB" "$DEST/"
+cp "$HEADER" "$DEST/"
 
 # Fail here, not in Xcode, if the feature set drifted.
 for symbol in afc_client_connect_rsd afc_get_device_info pairable_host_accept \
