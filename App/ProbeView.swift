@@ -20,8 +20,6 @@ struct ProbeView: View {
                         Button("Pair on this iPhone") { model.pair() }
                     case .advertising:
                         Label("waiting for the pairing sheet", systemImage: "dot.radiowaves.left.and.right")
-                    case .deviceConnected:
-                        Label("device connected", systemImage: "link")
                     case .awaitingPIN(let pin):
                         VStack(alignment: .leading, spacing: 6) {
                             Text("enter this PIN on the iPhone")

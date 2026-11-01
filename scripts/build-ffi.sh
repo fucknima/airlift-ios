@@ -47,6 +47,13 @@ fi
 cp "$LIB" "$DEST/"
 cp "$HEADER" "$DEST/"
 
+COUNT="$(nm -gU "$DEST/libidevice_ffi.a" 2>/dev/null | wc -l | tr -d ' ')"
+echo "external symbols: $COUNT"
+if [ "$COUNT" -lt 10 ]; then
+  echo "archive looks stripped or empty" >&2
+  nm -gU "$DEST/libidevice_ffi.a" 2>&1 | head -5 >&2
+fi
+
 # Report symbol presence; the Xcode link is the real gate.
 for symbol in afc_client_connect_rsd afc_get_device_info pairable_host_accept \
               tunnel_create_rppairing rsd_get_services; do

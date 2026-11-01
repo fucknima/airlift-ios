@@ -9,14 +9,15 @@ enum HostIdentity {
 }
 
 /// Runs the idevice pairable-host responder on a worker thread.
-/// The device initiates pair-setup against the advertised host, which is how
-/// an iPhone ends up holding a valid host pairing record without a Mac.
+///
+/// The current idevice FFI advertises `_remotepairing-pairable-host._tcp` from
+/// the Rust side and blocks until the device completes pair-setup or the token
+/// is cancelled. The PIN is generated there and typed into the device sheet.
 @MainActor
 final class PairingHost: ObservableObject {
     enum Phase: Equatable {
         case idle
         case advertising
-        case deviceConnected
         case awaitingPIN(String)
         case paired
         case failed(String)
@@ -25,15 +26,15 @@ final class PairingHost: ObservableObject {
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var pin: String?
 
-    private let advertiser = PairableHostAdvertiser()
     private let audio = AudioKeepAlive()
     private var worker: Thread?
     private var task: UIBackgroundTaskIdentifier = .invalid
+    private var cancelToken: OpaquePointer?
     private let box = CallbackBox()
 
     var busy: Bool {
         switch phase {
-        case .advertising, .deviceConnected, .awaitingPIN: return true
+        case .advertising, .awaitingPIN: return true
         default: return false
         }
     }
@@ -46,10 +47,13 @@ final class PairingHost: ObservableObject {
         audio.start()
         keepAwake()
 
+        let token = pairable_host_cancel_new()
+        cancelToken = token
+
         let output = store.path
         let box = self.box
         worker = Thread {
-            Self.accept(outputPath: output, box: box)
+            Self.accept(outputPath: output, box: box, cancel: token)
         }
         worker?.name = "airlift.pairable-host"
         worker?.qualityOfService = .userInitiated
@@ -57,20 +61,16 @@ final class PairingHost: ObservableObject {
     }
 
     func reset() {
-        advertiser.stop()
+        if let cancelToken {
+            pairable_host_cancel_signal(cancelToken)
+            pairable_host_cancel_free(cancelToken)
+            self.cancelToken = nil
+        }
         audio.stop()
         releaseAwake()
         phase = .idle
         pin = nil
     }
-
-    fileprivate func listening(port: UInt16, identifier: String, name: String, model: String,
-                               authTag: String, ver: String, minVer: String) {
-        advertiser.publish(port: port, serviceIdentifier: identifier, name: name,
-                           model: model, authTag: authTag, ver: ver, minVer: minVer)
-    }
-
-    fileprivate func connected() { phase = .deviceConnected }
 
     fileprivate func received(pin value: String) {
         pin = value
@@ -79,19 +79,26 @@ final class PairingHost: ObservableObject {
     }
 
     fileprivate func finished() {
+        releaseCancel()
         pin = nil
         phase = .paired
-        advertiser.stop()
         audio.stop()
         releaseAwake()
     }
 
     fileprivate func failed(_ message: String) {
+        releaseCancel()
         pin = nil
         phase = .failed(message)
-        advertiser.stop()
         audio.stop()
         releaseAwake()
+    }
+
+    private func releaseCancel() {
+        if let cancelToken {
+            pairable_host_cancel_free(cancelToken)
+            self.cancelToken = nil
+        }
     }
 
     private func keepAwake() {
@@ -109,7 +116,7 @@ final class PairingHost: ObservableObject {
         task = .invalid
     }
 
-    nonisolated private static func accept(outputPath: String, box: CallbackBox) {
+    nonisolated private static func accept(outputPath: String, box: CallbackBox, cancel: OpaquePointer?) {
         var outFile: OpaquePointer?
         var altIRK = [UInt8](repeating: 0, count: 16)
 
@@ -121,11 +128,9 @@ final class PairingHost: ObservableObject {
                     0,
                     pinTrampoline,
                     Unmanaged.passUnretained(box).toOpaque(),
-                    listeningTrampoline,
-                    Unmanaged.passUnretained(box).toOpaque(),
-                    connectedTrampoline,
-                    Unmanaged.passUnretained(box).toOpaque(),
+                    cancel,
                     &altIRK,
+                    nil,
                     &outFile
                 )
             }
@@ -167,34 +172,4 @@ private func pinTrampoline(_ pin: UnsafePointer<CChar>?, _ context: UnsafeMutabl
     let value = String(cString: pin)
     let box = Unmanaged<CallbackBox>.fromOpaque(context).takeUnretainedValue()
     DispatchQueue.main.async { box.owner?.received(pin: value) }
-}
-
-private func listeningTrampoline(
-    _ port: UInt16,
-    _ identifier: UnsafePointer<CChar>?,
-    _ name: UnsafePointer<CChar>?,
-    _ model: UnsafePointer<CChar>?,
-    _ authTag: UnsafePointer<CChar>?,
-    _ ver: UnsafePointer<CChar>?,
-    _ minVer: UnsafePointer<CChar>?,
-    _ context: UnsafeMutableRawPointer?
-) {
-    guard let context else { return }
-    let box = Unmanaged<CallbackBox>.fromOpaque(context).takeUnretainedValue()
-    let identifier = identifier.map { String(cString: $0) } ?? "airlift"
-    let name = name.map { String(cString: $0) } ?? HostIdentity.name
-    let model = model.map { String(cString: $0) } ?? HostIdentity.model
-    let authTag = authTag.map { String(cString: $0) } ?? ""
-    let ver = ver.map { String(cString: $0) } ?? "26"
-    let minVer = minVer.map { String(cString: $0) } ?? "17"
-    DispatchQueue.main.async {
-        box.owner?.listening(port: port, identifier: identifier, name: name,
-                             model: model, authTag: authTag, ver: ver, minVer: minVer)
-    }
-}
-
-private func connectedTrampoline(_ context: UnsafeMutableRawPointer?) {
-    guard let context else { return }
-    let box = Unmanaged<CallbackBox>.fromOpaque(context).takeUnretainedValue()
-    DispatchQueue.main.async { box.owner?.connected() }
 }
