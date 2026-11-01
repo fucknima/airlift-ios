@@ -7,5 +7,5 @@ xcuserdata/
 .DS_Store
 Vendor/idevice/idevice.h
 Vendor/idevice/libidevice_ffi.a
-Vendor/idevice/libidevice_ffi.a.part
+target/
 Airlift.xcodeproj/

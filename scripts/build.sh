@@ -8,7 +8,7 @@ if ! xcodebuild -version >/dev/null 2>&1; then
   exit 1
 fi
 
-./scripts/fetch-ffi.sh
+./scripts/build-ffi.sh
 
 if ! command -v xcodegen >/dev/null; then
   echo "xcodegen missing: brew install xcodegen" >&2

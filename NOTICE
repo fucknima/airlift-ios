@@ -12,8 +12,8 @@ Locus
 idevice
   https://github.com/jkcoxson/idevice
   Copyright (c) jkcoxson, MIT.
-  Used as a prebuilt static library and C header, fetched by
-  scripts/fetch-ffi.sh. RPPairing, RSD, AFC, tunnel.
+  Built from source at commit 8970209 by scripts/build-ffi.sh, used as a
+  static library and C header. RPPairing, RSD, AFC, tunnel.
 
 airlift
   https://github.com/0xjohnnydev/airlift

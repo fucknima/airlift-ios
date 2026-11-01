@@ -28,20 +28,24 @@ git remote add origin git@github.com:<you>/airlift-ios.git
 git push -u origin main
 ```
 
-`.github/workflows/build.yml` runs on every push to `main`, caches the idevice
-FFI download, builds, and uploads `airlift-unsigned-<sha>.ipa` plus `build.log`.
-Pushing a `v*` tag also creates a release with the IPA attached.
+`.github/workflows/build.yml` runs on every push to `main`, builds the idevice
+FFI from a pinned commit, caches it, builds the app, and uploads
+`airlift-unsigned-<sha>.ipa` plus `build.log`. Pushing a `v*` tag also creates a
+release with the IPA attached.
 
 Local build, same script:
 
 ```sh
-brew install xcodegen
+brew install xcodegen rustup
+rustup target add aarch64-apple-ios
 ./scripts/build.sh
 ```
 
-The script fetches `idevice.h` and `libidevice_ffi.a` (about 90 MB) from the
-Locus repository, generates the Xcode project, builds for `iphoneos`, and
-writes `Airlift-unsigned.ipa`.
+`scripts/build-ffi.sh` clones `jkcoxson/idevice` at commit `8970209`, builds
+`libidevice_ffi.a` for `aarch64-apple-ios` with `afc,tunnel_tcp_stack,ring`,
+generates the matching header, and refuses to continue if the AFC, pairable
+host, tunnel, or RSD symbols are missing. Then xcodegen and xcodebuild produce
+`Airlift-unsigned.ipa`.
 
 The IPA is unsigned. Sign it with a free developer account, SideStore/AltStore,
 or a paid team before installing. No special entitlements are requested, so a

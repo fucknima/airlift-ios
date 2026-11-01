@@ -23,8 +23,19 @@ jobs:
       - name: cache idevice ffi
         uses: actions/cache@v4
         with:
-          path: Vendor/idevice
-          key: idevice-ffi-locus-main-v2
+          path: |
+            Vendor/idevice
+            .build/idevice/target
+          key: idevice-ffi-8970209-afc-tunnel-ring-v1
+
+      - name: rust
+        run: |
+          if ! command -v cargo >/dev/null; then
+            curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          fi
+          . "$HOME/.cargo/env"
+          rustup target add aarch64-apple-ios
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: xcodegen
         run: brew install xcodegen
