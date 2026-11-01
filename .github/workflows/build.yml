@@ -29,11 +29,12 @@ jobs:
           key: idevice-ffi-8970209-afc-tunnel-ring-v1
 
       - name: rust
+        shell: bash
         run: |
-          if ! command -v cargo >/dev/null; then
+          if ! command -v rustup >/dev/null; then
             curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
           fi
-          . "$HOME/.cargo/env"
+          export PATH="$HOME/.cargo/bin:$PATH"
           rustup target add aarch64-apple-ios
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
