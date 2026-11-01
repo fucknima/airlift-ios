@@ -24,13 +24,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Vendor/idevice
-          key: idevice-ffi-locus-main-v1
+          key: idevice-ffi-locus-main-v2
 
       - name: xcodegen
         run: brew install xcodegen
 
       - name: build
-        run: ./scripts/build.sh | tee build.log
+        shell: bash
+        run: |
+          set -o pipefail
+          ./scripts/build.sh 2>&1 | tee build.log
 
       - name: report
         if: always()
