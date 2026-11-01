@@ -1,4 +1,5 @@
 import Foundation
+import idevice
 import SwiftUI
 
 @MainActor
