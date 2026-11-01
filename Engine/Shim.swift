@@ -26,7 +26,7 @@ final class ShimStream {
     func send(_ data: Data) throws {
         guard let handle else { throw LinkError.shim("closed") }
         let error = data.withUnsafeBytes { raw in
-            adapter_send(handle, raw.bindMemory(to: UInt8.self).baseAddress, data.count)
+            adapter_send(handle, raw.bindMemory(to: UInt8.self).baseAddress, UInt(data.count))
         }
         if let error { throw LinkError.shim(FFI.message(error, "send") ?? "send failed") }
     }
@@ -34,12 +34,12 @@ final class ShimStream {
     func recv(max: Int = 8192) throws -> Data {
         guard let handle else { throw LinkError.shim("closed") }
         var buffer = [UInt8](repeating: 0, count: max)
-        var length = 0
+        var length: UInt = 0
         let error = buffer.withUnsafeMutableBufferPointer { raw in
-            adapter_recv(handle, raw.baseAddress, &length, max)
+            adapter_recv(handle, raw.baseAddress, &length, UInt(max))
         }
         if let error { throw LinkError.shim(FFI.message(error, "recv") ?? "recv failed") }
-        return Data(buffer.prefix(length))
+        return Data(buffer.prefix(Int(length)))
     }
 }
 

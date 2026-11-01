@@ -52,7 +52,7 @@ final class PairingHost: ObservableObject {
         var handle: OpaquePointer?
         var serviceID: UnsafeMutablePointer<CChar>?
         var txt: UnsafeMutablePointer<UInt8>?
-        var txtLength = 0
+        var txtLength: UInt = 0
         var altIRK = [UInt8](repeating: 0, count: 16)
 
         let error: UnsafeMutablePointer<IdeviceFfiError>? = HostIdentity.name.withCString { name in
@@ -83,7 +83,7 @@ final class PairingHost: ObservableObject {
 
         var records: [String: String] = [:]
         if let txt {
-            let data = Data(bytes: txt, count: txtLength)
+            let data = Data(bytes: txt, count: Int(txtLength))
             idevice_data_free(txt, txtLength)
             records = (try? PropertyListSerialization.propertyList(from: data, options: [], format: nil)) as? [String: String] ?? [:]
         }
@@ -105,7 +105,7 @@ final class PairingHost: ObservableObject {
             domain: "local.",
             type: "_remotepairing-pairable-host._tcp.",
             name: instance,
-            port: Int(port)
+            port: Int32(port)
         )
         netService.setTXTRecord(NetService.data(fromTXTRecord: records.mapValues { Data($0.utf8) }))
         netService.publish()
