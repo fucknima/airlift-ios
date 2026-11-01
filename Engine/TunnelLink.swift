@@ -5,6 +5,7 @@ struct RSDService: Identifiable, Hashable {
     let name: String
     let port: UInt16
     let remoteXPC: Bool
+    let entitlement: String
 
     var id: String { name }
 }
@@ -120,6 +121,19 @@ final class TunnelLink: @unchecked Sendable {
         }
     }
 
+    func withAFC<T>(_ body: (OpaquePointer) throws -> T) throws -> T {
+        try queue.sync {
+            guard let adapter, let handshake else { throw LinkError.tunnel("not connected") }
+            var client: OpaquePointer?
+            if let error = afc_client_connect_rsd(adapter, handshake, &client) {
+                throw LinkError.afc(FFI.message(error, "connect") ?? "connect failed")
+            }
+            guard let client else { throw LinkError.afc("no client") }
+            defer { afc_client_free(client) }
+            return try body(client)
+        }
+    }
+
     /// Runs `body` on the tunnel queue, where adapter streams must live.
     func withAdapter<T>(_ body: (OpaquePointer) throws -> T) throws -> T {
         try queue.sync {
@@ -152,7 +166,8 @@ final class TunnelLink: @unchecked Sendable {
             return RSDService(
                 name: String(cString: name),
                 port: service.port,
-                remoteXPC: service.uses_remote_xpc
+                remoteXPC: service.uses_remote_xpc,
+                entitlement: service.entitlement.map { String(cString: $0) } ?? ""
             )
         }.sorted { $0.name < $1.name }
     }

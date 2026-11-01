@@ -112,7 +112,7 @@ final class ProbeModel: ObservableObject {
                     self.services = list
                     self.log("rsd: \(list.count) 个服务")
                     for service in list where service.name.contains("shim") || service.name.contains("afc") || service.name.contains("fileservice") {
-                        self.log("  \(service.name) port=\(service.port)\(service.remoteXPC ? " xpc" : "")")
+                        self.log("  \(service.name) port=\(service.port) ent=\(service.entitlement.isEmpty ? "-" : service.entitlement)")
                     }
                     self.busy = false
                     self.refresh()
@@ -144,6 +144,43 @@ final class ProbeModel: ObservableObject {
                     self.log("afc 失败: \(error.localizedDescription)")
                     self.busy = false
                 }
+            }
+        }
+    }
+
+    func afcSymlinkProbe() {
+        guard !busy else { return }
+        busy = true
+        log("AFC 符号链接测试")
+        Task.detached { [link] in
+            do {
+                let result = try link.withAFC { client -> String in
+                    let name = "airlift-probe-link"
+                    let target = "/var/tmp"
+                    let symbolic = unsafeBitCast(UInt32(2), to: AfcLinkType.self)
+                    var message = "created"
+                    if let error = name.withCString({ linkPath in
+                        target.withCString { targetPath in
+                            afc_make_link(client, targetPath, linkPath, symbolic)
+                        }
+                    }) {
+                        message = FFI.message(error, "make_link") ?? "make_link failed"
+                    }
+                    var info = AfcFileInfo()
+                    if let error = name.withCString({ afc_get_file_info(client, $0, &info) }) {
+                        message += " info=" + (FFI.message(error, "info") ?? "info failed")
+                    } else {
+                        let kind = info.st_ifmt.map { String(cString: $0) } ?? "?"
+                        let size = info.st_link_target.map { String(cString: $0) } ?? "-"
+                        message += " ifmt=\(kind) target=\(size)"
+                        afc_file_info_free(&info)
+                    }
+                    _ = name.withCString { afc_remove_path(client, $0) }
+                    return message
+                }
+                await MainActor.run { self.log("AFC 链接: \(result)"); self.busy = false }
+            } catch {
+                await MainActor.run { self.log("AFC 链接失败: \(error.localizedDescription)"); self.busy = false }
             }
         }
     }

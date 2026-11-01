@@ -96,6 +96,8 @@ struct ProbeView: View {
                 Section {
                     Button("③ 读取 AFC 设备信息") { model.runAFC() }
                         .disabled(model.busy || model.services.isEmpty)
+                    Button("AFC 符号链接测试") { model.afcSymlinkProbe() }
+                        .disabled(model.busy || model.services.isEmpty)
                     Button("探测 shim 握手（实验）") { model.probeZip() }
                         .disabled(model.busy || model.services.isEmpty)
                     if model.services.isEmpty {
