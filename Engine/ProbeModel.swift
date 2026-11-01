@@ -151,30 +151,49 @@ final class ProbeModel: ObservableObject {
     func probeZip() {
         guard !busy else { return }
         busy = true
-        log("探测 zip shim")
+        log("探测 shim 握手: RSDCheckin")
         Task.detached { [link] in
             do {
-                guard let port = try link.port(of: "com.apple.streaming_zip_conduit.shim.remote") else {
+                let service = "com.apple.streaming_zip_conduit.shim.remote"
+                guard let port = try link.port(of: service) else {
                     throw LinkError.shim("服务列表里没有 zip shim")
                 }
                 let result = try link.withAdapter { adapter -> String in
                     let stream = try ShimStream(adapter: adapter, port: port)
                     defer { stream.close() }
-                    let frame = try PlistFrame.encode(["MediaSubdir": "airlift-probe"])
-                    try stream.send(frame)
-                    let reply = try stream.recv()
-                    if let object = PlistFrame.decode(reply) {
-                        return "\(reply.count)B plist=\(object)"
+                    let label = UUID().uuidString
+                    let checkin: [String: Any] = [
+                        "Label": label,
+                        "ProtocolVersion": 2,
+                        "Request": "RSDCheckin",
+                    ]
+                    try stream.send(try PlistFrame.encode(checkin))
+                    let reply = try stream.recv(timeout: 3000)
+                    if reply.isEmpty { return "checkin 无回应" }
+                    guard let object = PlistFrame.decode(reply) else {
+                        return "checkin hex=\(Hex.dump(reply))"
                     }
-                    return "\(reply.count)B hex=\(Hex.dump(reply))"
+                    guard let dict = object as? [String: Any] else { return "checkin=\(object)" }
+                    if let rawPort = dict["Port"] as? Int, rawPort > 0, rawPort < 65536 {
+                        let next = try ShimStream(adapter: adapter, port: UInt16(rawPort))
+                        defer { next.close() }
+                        try next.send(try PlistFrame.encode(["MediaSubdir": "airlift-probe"]))
+                        let ack = try next.recv(timeout: 3000)
+                        let body = ack.isEmpty ? "silent" : (PlistFrame.decode(ack).map { "\($0)" } ?? Hex.dump(ack))
+                        return "checkin=\(dict) nextPort=\(rawPort) zip=\(body)"
+                    }
+                    try stream.send(try PlistFrame.encode(["MediaSubdir": "airlift-probe"]))
+                    let ack = try stream.recv(timeout: 3000)
+                    let body = ack.isEmpty ? "silent" : (PlistFrame.decode(ack).map { "\($0)" } ?? Hex.dump(ack))
+                    return "checkin=\(dict) samePort zip=\(body)"
                 }
                 await MainActor.run {
-                    self.log("zip 探测: \(result)")
+                    self.log("shim 探测: \(result)")
                     self.busy = false
                 }
             } catch {
                 await MainActor.run {
-                    self.log("zip 探测失败: \(error.localizedDescription)")
+                    self.log("shim 探测失败: \(error.localizedDescription)")
                     self.busy = false
                 }
             }

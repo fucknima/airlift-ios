@@ -31,7 +31,21 @@ final class ShimStream {
         if let error { throw LinkError.shim(FFI.message(error, "send") ?? "send failed") }
     }
 
-    func recv(max: Int = 8192) throws -> Data {
+    func recv(timeout: UInt64 = 0, max: Int = 8192) throws -> Data {
+        if timeout > 0 {
+            guard let handle else { throw LinkError.shim("closed") }
+            var buffer = [UInt8](repeating: 0, count: max)
+            var length: UInt = 0
+            let error = buffer.withUnsafeMutableBufferPointer { raw in
+                adapter_recv_timeout(handle, raw.baseAddress, &length, UInt(max), timeout)
+            }
+            if let error { throw LinkError.shim(FFI.message(error, "recv") ?? "recv failed") }
+            return Data(buffer.prefix(Int(length)))
+        }
+        return try recvSlow(max: max)
+    }
+
+    private func recvSlow(max: Int) throws -> Data {
         guard let handle else { throw LinkError.shim("closed") }
         var buffer = [UInt8](repeating: 0, count: max)
         var length: UInt = 0

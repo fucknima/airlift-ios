@@ -53,6 +53,47 @@ pub unsafe extern "C" fn adapter_connect_stream(
 RS
 fi
 
+if ! grep -q 'adapter_recv_timeout' "$SRC/ffi/src/adapter.rs"; then
+  cat >> "$SRC/ffi/src/adapter.rs" <<'RS'
+
+/// like adapter_recv, but returns an empty buffer after `timeout_ms`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn adapter_recv_timeout(
+    handle: *mut AdapterStreamHandle,
+    data: *mut u8,
+    length: *mut usize,
+    max_length: usize,
+    timeout_ms: u64,
+) -> *mut IdeviceFfiError {
+    if handle.is_null() || data.is_null() || length.is_null() {
+        return ffi_err!(IdeviceError::FfiInvalidArg);
+    }
+    let adapter = unsafe { &mut (*handle).0 };
+    let res: Result<Vec<u8>, std::io::Error> = run_sync(async move {
+        let mut buf = [0u8; 4096];
+        match tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), adapter.read(&mut buf)).await {
+            Ok(Ok(n)) => Ok(buf[..n].to_vec()),
+            Ok(Err(e)) => Err(e),
+            Err(_) => Ok(Vec::new()),
+        }
+    });
+    match res {
+        Ok(received) => {
+            if received.len() > max_length {
+                return ffi_err!(IdeviceError::FfiBufferTooSmall(received.len(), max_length));
+            }
+            unsafe {
+                std::ptr::copy_nonoverlapping(received.as_ptr(), data, received.len());
+                *length = received.len();
+            }
+            null_mut()
+        }
+        Err(e) => ffi_err!(e),
+    }
+}
+RS
+fi
+
 rustup target add aarch64-apple-ios >/dev/null
 
 echo "cargo build $FEATURES"
