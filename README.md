@@ -21,12 +21,31 @@ Status:
 
 ## build
 
+GitHub Actions, macOS runner, unsigned IPA:
+
+```sh
+git remote add origin git@github.com:<you>/airlift-ios.git
+git push -u origin main
+```
+
+`.github/workflows/build.yml` runs on every push to `main`, caches the idevice
+FFI download, builds, and uploads `airlift-unsigned-<sha>.ipa` plus `build.log`.
+Pushing a `v*` tag also creates a release with the IPA attached.
+
+Local build, same script:
+
 ```sh
 brew install xcodegen
 ./scripts/build.sh
 ```
 
-The script fetches `idevice.h` and `libidevice_ffi.a` (about 90 MB) from the Locus repository, generates the Xcode project, builds for `iphoneos`, and writes `Airlift-unsigned.ipa`.
+The script fetches `idevice.h` and `libidevice_ffi.a` (about 90 MB) from the
+Locus repository, generates the Xcode project, builds for `iphoneos`, and
+writes `Airlift-unsigned.ipa`.
+
+The IPA is unsigned. Sign it with a free developer account, SideStore/AltStore,
+or a paid team before installing. No special entitlements are requested, so a
+plain development profile is enough.
 
 ## run
 

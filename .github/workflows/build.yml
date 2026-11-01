@@ -2,18 +2,56 @@ name: build
 
 on:
   push:
+    branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ipa:
     runs-on: macos-15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
+      - name: cache idevice ffi
+        uses: actions/cache@v4
+        with:
+          path: Vendor/idevice
+          key: idevice-ffi-locus-main-v1
+
       - name: xcodegen
         run: brew install xcodegen
+
       - name: build
-        run: ./scripts/build.sh
+        run: ./scripts/build.sh | tee build.log
+
+      - name: report
+        if: always()
+        run: |
+          tail -n 120 build.log || true
+          ls -lh Airlift-unsigned.ipa || true
+
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: airlift-unsigned-ipa
-          path: Airlift-unsigned.ipa
+          name: airlift-unsigned-${{ github.sha }}
+          path: |
+            Airlift-unsigned.ipa
+            build.log
+          if-no-files-found: warn
+
+      - name: release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" Airlift-unsigned.ipa \
+            --title "airlift ${GITHUB_REF_NAME}" \
+            --notes "unsigned ipa, sign before install"
