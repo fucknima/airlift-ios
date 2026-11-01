@@ -154,53 +154,44 @@ final class ProbeModel: ObservableObject {
         log("探测 shim: RSDCheckin + StartService")
         Task.detached { [link] in
             do {
-                let service = "com.apple.streaming_zip_conduit.shim.remote"
-                guard let port = try link.port(of: service) else {
-                    throw LinkError.shim("服务列表里没有 zip shim")
-                }
+                let shim = "com.apple.streaming_zip_conduit.shim.remote"
+                let plain = shim.replacingOccurrences(of: ".shim.remote", with: "")
+                guard let port = try link.port(of: shim) else { throw LinkError.shim("没有 zip shim") }
                 let result = try link.withAdapter { adapter -> String in
-                    let stream = try ShimStream(adapter: adapter, port: port)
-                    defer { stream.close() }
-                    let label = UUID().uuidString
-                    let base: [String: Any] = ["Label": label, "ProtocolVersion": 2]
-                    var checkin = base
-                    checkin["Request"] = "RSDCheckin"
-                    try stream.send(try PlistFrame.encode(checkin))
-                    let ack = try stream.recvFrame()
-                    guard let ackObject = PlistFrame.decode(ack) else {
-                        return "checkin hex=\(Hex.dump(ack))"
+                    var report: [String] = []
+                    for candidate in [plain, shim] {
+                        let stream = try ShimStream(adapter: adapter, port: port)
+                        let label = "airlift"
+                        var checkin: [String: Any] = ["Label": label, "ProtocolVersion": 2, "Request": "RSDCheckin"]
+                        try stream.send(try PlistFrame.encode(checkin))
+                        _ = try stream.recvFrame()
+                        checkin["Request"] = "StartService"
+                        checkin["Service"] = candidate
+                        try stream.send(try PlistFrame.encode(checkin))
+                        let reply = try stream.recvFrame()
+                        guard let object = PlistFrame.decode(reply) as? [String: Any] else {
+                            report.append("\(candidate): hex \(Hex.dump(reply))")
+                            stream.close()
+                            continue
+                        }
+                        if let rawPort = object["Port"] as? Int, rawPort > 0, rawPort < 65536 {
+                            let next = try ShimStream(adapter: adapter, port: UInt16(rawPort))
+                            try next.send(try PlistFrame.encode(["Version": 1, "MediaSubdir": "airlift-probe"]))
+                            let body = try next.recvFrame()
+                            report.append("\(candidate): port=\(rawPort) reply=\(PlistFrame.decode(body).map { "\($0)" } ?? Hex.dump(body))")
+                            next.close()
+                        } else {
+                            try stream.send(try PlistFrame.encode(["Version": 1, "MediaSubdir": "airlift-probe"]))
+                            let body = try stream.recvFrame()
+                            report.append("\(candidate): samePort reply=\(PlistFrame.decode(body).map { "\($0)" } ?? Hex.dump(body))")
+                        }
+                        stream.close()
                     }
-
-                    var start = base
-                    start["Request"] = "StartService"
-                    start["Service"] = service
-                    try stream.send(try PlistFrame.encode(start))
-                    let reply = try stream.recvFrame()
-                    guard let object = PlistFrame.decode(reply) as? [String: Any] else {
-                        return "checkin=\(ackObject) start hex=\(Hex.dump(reply))"
-                    }
-                    if let rawPort = object["Port"] as? Int, rawPort > 0, rawPort < 65536 {
-                        let next = try ShimStream(adapter: adapter, port: UInt16(rawPort))
-                        defer { next.close() }
-                        try next.send(try PlistFrame.encode(["MediaSubdir": "airlift-probe"]))
-                        let body = try next.recvFrame()
-                        let text = PlistFrame.decode(body).map { "\($0)" } ?? Hex.dump(body)
-                        return "start=\(object) port=\(rawPort) zip=\(text)"
-                    }
-                    try stream.send(try PlistFrame.encode(["MediaSubdir": "airlift-probe"]))
-                    let body = try stream.recvFrame()
-                    let text = PlistFrame.decode(body).map { "\($0)" } ?? Hex.dump(body)
-                    return "start=\(object) samePort zip=\(text)"
+                    return report.joined(separator: " | ")
                 }
-                await MainActor.run {
-                    self.log("shim 探测: \(result)")
-                    self.busy = false
-                }
+                await MainActor.run { self.log("shim 探测: \(result)"); self.busy = false }
             } catch {
-                await MainActor.run {
-                    self.log("shim 探测失败: \(error.localizedDescription)")
-                    self.busy = false
-                }
+                await MainActor.run { self.log("shim 探测失败: \(error.localizedDescription)"); self.busy = false }
             }
         }
     }
