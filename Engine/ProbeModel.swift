@@ -7,59 +7,105 @@ final class ProbeModel: ObservableObject {
     @Published var busy = false
     @Published var services: [RSDService] = []
     @Published var afc: AFCReport?
-    @Published var vpnConnected = false
     @Published var hasRecord = false
-    @Published var showImporter = false
+    @Published var recordSize = 0
+    @Published var showPicker = false
     @Published var error: String?
+    @Published var host = Endpoint.load().host
+    @Published var portText = String(Endpoint.load().port)
+    @Published var candidates: [String] = []
 
     let pairing = PairingHost()
     let store = PairingStore()
     private let link = TunnelLink()
     private var started = false
 
-    var recordExists: Bool { store.exists }
+    var endpoint: Endpoint {
+        let port = UInt16(portText.trimmingCharacters(in: .whitespaces)) ?? Endpoint.fallback.port
+        return Endpoint(host: host.trimmingCharacters(in: .whitespaces), port: port)
+    }
 
     func start() {
         guard !started else { return }
         started = true
+        candidates = EndpointProbe.candidates()
         refresh()
     }
 
     func refresh() {
         hasRecord = store.exists
-        vpnConnected = LocalDevVPN.isConnected
+        recordSize = store.size
+    }
+
+    func saveEndpoint() {
+        endpoint.save()
     }
 
     func log(_ text: String) {
         let stamp = Self.formatter.string(from: Date())
         lines.append("[\(stamp)] \(text)")
-        if lines.count > 400 { lines.removeFirst(lines.count - 400) }
+        if lines.count > 500 { lines.removeFirst(lines.count - 500) }
         NSLog("[airlift] %@", text)
     }
 
     func pair() {
         refresh()
+        log("开始本机配对，等待系统配对面板")
         pairing.start(store: store)
-        log("pairable host started; confirm the code on the iPhone pairing sheet")
     }
 
-    func openVPN() {
-        LocalDevVPN.openOrInstall()
-        log("asked LocalDevVPN to connect")
+    func resetPairing() {
+        pairing.reset()
+        log("配对已取消")
+    }
+
+    func probe() {
+        let endpoint = endpoint
+        saveEndpoint()
+        guard !busy else { return }
+        busy = true
+        log("TCP 探测 \(endpoint.label)")
+        Task.detached {
+            let result = EndpointProbe.tcp(endpoint)
+            await MainActor.run {
+                self.log("探测结果: \(result)")
+                self.busy = false
+            }
+        }
     }
 
     func connect() {
         guard !busy else { return }
         refresh()
+        let endpoint = endpoint
+        saveEndpoint()
+
+        guard store.exists else {
+            error = "没有配对记录，先在本机配对，或导入配对文件"
+            log("连接中止: 没有配对记录")
+            return
+        }
+
         busy = true
         error = nil
-        log("tunnel → \(TunnelEndpoint.host):\(TunnelEndpoint.port)")
+        log("隧道目标 \(endpoint.label)")
         Task.detached { [link, store] in
+            let probe = EndpointProbe.tcp(endpoint)
+            await MainActor.run { self.log("探测结果: \(probe)") }
+            guard probe == "TCP 已连通" else {
+                await MainActor.run {
+                    self.error = "端口不通: \(probe)"
+                    self.busy = false
+                }
+                return
+            }
+
             do {
-                let list = try link.connect(store: store)
+                await MainActor.run { self.log("TCP 通了，开始 RPPairing 握手") }
+                let list = try link.connect(store: store, host: endpoint.host, port: endpoint.port)
                 await MainActor.run {
                     self.services = list
-                    self.log("rsd: \(list.count) services")
+                    self.log("rsd: \(list.count) 个服务")
                     for service in list where service.name.contains("shim") || service.name.contains("afc") || service.name.contains("fileservice") {
                         self.log("  \(service.name) port=\(service.port)\(service.remoteXPC ? " xpc" : "")")
                     }
@@ -69,7 +115,7 @@ final class ProbeModel: ObservableObject {
             } catch {
                 await MainActor.run {
                     self.error = error.localizedDescription
-                    self.log("connect failed: \(error.localizedDescription)")
+                    self.log("连接失败: \(error.localizedDescription)")
                     self.busy = false
                 }
             }
@@ -90,7 +136,7 @@ final class ProbeModel: ObservableObject {
             } catch {
                 await MainActor.run {
                     self.error = error.localizedDescription
-                    self.log("afc failed: \(error.localizedDescription)")
+                    self.log("afc 失败: \(error.localizedDescription)")
                     self.busy = false
                 }
             }
@@ -101,10 +147,22 @@ final class ProbeModel: ObservableObject {
         do {
             try store.importRecord(from: url)
             refresh()
-            log("pairing record imported")
+            log("配对记录已导入，\(recordSize) 字节")
         } catch {
             self.error = error.localizedDescription
-            log("import failed: \(error.localizedDescription)")
+            log("导入失败: \(error.localizedDescription)")
+        }
+    }
+
+    func importClipboard() {
+        let text = UIPasteboard.general.string ?? ""
+        do {
+            try store.importRecord(from: text)
+            refresh()
+            log("配对记录已从剪贴板导入，\(recordSize) 字节")
+        } catch {
+            self.error = error.localizedDescription
+            log("剪贴板导入失败: \(error.localizedDescription)")
         }
     }
 
@@ -115,7 +173,7 @@ final class ProbeModel: ObservableObject {
             services = []
             afc = nil
             refresh()
-            log("pairing record removed")
+            log("配对记录已删除")
         } catch {
             self.error = error.localizedDescription
         }
@@ -124,6 +182,7 @@ final class ProbeModel: ObservableObject {
     func clearLog() { lines.removeAll() }
 
     var logText: String { lines.joined(separator: "\n") }
+    var recordText: String { hasRecord ? "已保存 \(recordSize) 字节" : "没有" }
 
     private static let formatter: DateFormatter = {
         let formatter = DateFormatter()

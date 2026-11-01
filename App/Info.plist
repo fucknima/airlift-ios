@@ -29,7 +29,7 @@
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Airlift advertises as a pairable host on the local network and reaches its own developer tunnel through LocalDevVPN.</string>
+	<string>Airlift 在本机广播配对服务，并通过你自己的回环工具访问设备的开发者服务。</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_remotepairing-pairable-host._tcp</string>
@@ -43,10 +43,6 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
-	<key>LSApplicationQueriesSchemes</key>
-	<array>
-		<string>localdevvpn</string>
-	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

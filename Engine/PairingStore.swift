@@ -1,5 +1,6 @@
 import Foundation
 import UniformTypeIdentifiers
+import UIKit
 
 /// The RPPairing record lives in Application Support, mode 0600.
 final class PairingStore: @unchecked Sendable {
@@ -17,11 +18,36 @@ final class PairingStore: @unchecked Sendable {
     var url: URL { directory.appendingPathComponent(Self.fileName) }
     var path: String { url.path }
     var exists: Bool { fm.fileExists(atPath: path) }
+    var size: Int { (try? fm.attributesOfItem(atPath: path)[.size] as? Int) ?? 0 }
 
     func importRecord(from source: URL) throws {
         let scoped = source.startAccessingSecurityScopedResource()
         defer { if scoped { source.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: source)
+        try install(data)
+    }
+
+    /// Pairing records are often copied as text because the picker cannot see
+    /// them, or because the file came out of a chat app.
+    func importRecord(from text: String) throws {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw StoreError.empty }
+        if let data = trimmed.data(using: .utf8), (try? PropertyListSerialization.propertyList(from: data, options: [], format: nil)) != nil {
+            try install(data)
+            return
+        }
+        if let data = Data(base64Encoded: trimmed, options: [.ignoreUnknownCharacters]) {
+            try install(data)
+            return
+        }
+        throw StoreError.invalidRecord
+    }
+
+    func remove() throws {
+        if exists { try fm.removeItem(at: url) }
+    }
+
+    private func install(_ data: Data) throws {
         guard !data.isEmpty,
               (try? PropertyListSerialization.propertyList(from: data, options: [], format: nil)) != nil else {
             throw StoreError.invalidRecord
@@ -29,18 +55,16 @@ final class PairingStore: @unchecked Sendable {
         try data.write(to: url, options: .atomic)
         try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
     }
-
-    func remove() throws {
-        if exists { try fm.removeItem(at: url) }
-    }
 }
 
 enum StoreError: LocalizedError {
+    case empty
     case invalidRecord
 
     var errorDescription: String? {
         switch self {
-        case .invalidRecord: return "not an RPPairing plist"
+        case .empty: return "剪贴板是空的"
+        case .invalidRecord: return "内容不是 plist，也不是 base64 的 plist"
         }
     }
 }
