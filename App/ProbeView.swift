@@ -16,11 +16,14 @@ struct ProbeView: View {
                     case .advertising:
                         HStack(spacing: 8) {
                             ProgressView()
-                            Text("等待系统配对面板")
+                            Text("正在广播，等待设备发起配对")
                         }
-                        Text("面板一般会自己弹出。30 秒没有出现，说明广播没被系统发现，把下面的日志发出来。")
+                        Text("1. 设置 > 隐私与安全性 > 开发者模式，打开并重启")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        Text("2. 回到 设置 > 开发者，发起配对，选列表里的 Airlift")
+                            .font(.footnote)
+                        Text("3. 先输设备密码，再输下面出现的六位码")
+                            .font(.footnote)
                         Button("取消配对") { model.resetPairing() }
                     case .awaitingPIN(let pin):
                         VStack(alignment: .leading, spacing: 8) {
@@ -92,6 +95,8 @@ struct ProbeView: View {
 
                 Section {
                     Button("③ 读取 AFC 设备信息") { model.runAFC() }
+                        .disabled(model.busy || model.services.isEmpty)
+                    Button("探测 zip shim（实验）") { model.probeZip() }
                         .disabled(model.busy || model.services.isEmpty)
                     if model.services.isEmpty {
                         Text("先完成第 ② 步")

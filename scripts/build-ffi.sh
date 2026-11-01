@@ -26,6 +26,33 @@ fi
 git -C "$SRC" fetch --quiet origin "$PINNED" || true
 git -C "$SRC" checkout --quiet --force "$PINNED"
 
+# Add a raw adapter stream, missing from upstream FFI.
+if ! grep -q 'adapter_connect_stream' "$SRC/ffi/src/adapter.rs"; then
+  cat >> "$SRC/ffi/src/adapter.rs" <<'RS'
+
+/// Connects the adapter and returns a stream usable with adapter_send/adapter_recv.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn adapter_connect_stream(
+    adapter_handle: *mut AdapterHandle,
+    port: u16,
+    stream_handle: *mut *mut AdapterStreamHandle,
+) -> *mut IdeviceFfiError {
+    if adapter_handle.is_null() || stream_handle.is_null() {
+        return ffi_err!(IdeviceError::FfiInvalidArg);
+    }
+    let adapter = unsafe { &mut (*adapter_handle).0 };
+    let res = run_sync(async move { adapter.connect(port).await });
+    match res {
+        Ok(r) => {
+            unsafe { *stream_handle = Box::into_raw(Box::new(AdapterStreamHandle(r))) };
+            null_mut()
+        }
+        Err(e) => ffi_err!(e),
+    }
+}
+RS
+fi
+
 rustup target add aarch64-apple-ios >/dev/null
 
 echo "cargo build $FEATURES"

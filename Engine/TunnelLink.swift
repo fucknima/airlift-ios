@@ -21,6 +21,7 @@ enum LinkError: LocalizedError {
     case tunnel(String)
     case handshake(String)
     case afc(String)
+    case shim(String)
 
     var errorDescription: String? {
         switch self {
@@ -29,6 +30,7 @@ enum LinkError: LocalizedError {
         case .tunnel(let text): return "tunnel: \(text)"
         case .handshake(let text): return "rsd: \(text)"
         case .afc(let text): return "afc: \(text)"
+        case .shim(let text): return "shim: \(text)"
         }
     }
 }
@@ -116,6 +118,18 @@ final class TunnelLink: @unchecked Sendable {
                 freeBytes: UInt64(info.free_bytes)
             )
         }
+    }
+
+    /// Runs `body` on the tunnel queue, where adapter streams must live.
+    func withAdapter<T>(_ body: (OpaquePointer) throws -> T) throws -> T {
+        try queue.sync {
+            guard let adapter else { throw LinkError.tunnel("not connected") }
+            return try body(adapter)
+        }
+    }
+
+    func port(of service: String) throws -> UInt16? {
+        try queue.sync { try servicesOnQueue().first { $0.name == service }?.port }
     }
 
     func close() {

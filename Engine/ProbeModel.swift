@@ -148,6 +148,39 @@ final class ProbeModel: ObservableObject {
         }
     }
 
+    func probeZip() {
+        guard !busy else { return }
+        busy = true
+        log("探测 zip shim")
+        Task.detached { [link] in
+            do {
+                guard let port = try link.port(of: "com.apple.streaming_zip_conduit.shim.remote") else {
+                    throw LinkError.shim("服务列表里没有 zip shim")
+                }
+                let result = try link.withAdapter { adapter -> String in
+                    let stream = try ShimStream(adapter: adapter, port: port)
+                    defer { stream.close() }
+                    let frame = try PlistFrame.encode(["MediaSubdir": "airlift-probe"])
+                    try stream.send(frame)
+                    let reply = try stream.recv()
+                    if let object = PlistFrame.decode(reply) {
+                        return "\(reply.count)B plist=\(object)"
+                    }
+                    return "\(reply.count)B hex=\(Hex.dump(reply))"
+                }
+                await MainActor.run {
+                    self.log("zip 探测: \(result)")
+                    self.busy = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.log("zip 探测失败: \(error.localizedDescription)")
+                    self.busy = false
+                }
+            }
+        }
+    }
+
     func importRecord(_ url: URL) {
         do {
             try store.importRecord(from: url)
