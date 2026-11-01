@@ -44,8 +44,8 @@ final class TunnelLink: @unchecked Sendable {
     var isConnected: Bool { queue.sync { handshake != nil } }
 
     /// Connects to the loopback developer tunnel and performs RSD checkin.
-    func connect(store: PairingStore, host: String = TunnelEndpoint.host,
-                 port: UInt16 = TunnelEndpoint.port, hostname: String = HostIdentity.name) throws -> [RSDService] {
+    func connect(store: PairingStore, host: String = Endpoint.fallback.host,
+                 port: UInt16 = Endpoint.fallback.port, hostname: String = HostIdentity.name) throws -> [RSDService] {
         try queue.sync {
             closeOnQueue()
             guard store.exists else { throw LinkError.noPairing }
