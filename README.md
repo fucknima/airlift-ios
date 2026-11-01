@@ -9,8 +9,11 @@ Two halves:
 
 Status:
 
-- wave 1, in this tree: pairing, record store/import, LocalDevVPN control, tunnel, RSD service listing, AFC device info.
+- wave 1, built green on GitHub Actions: pairing, record store/import, LocalDevVPN control, tunnel, RSD service listing, AFC device info. Release `v0.1.0` carries the unsigned IPA.
+- device test pending. The open question is whether the device pairing sheet discovers the host advertised by the Rust responder. If it does not, the fallback is to pin the FFI to the commit that still exposes `listening`/`connected` callbacks and advertise through Network.framework, the way Locus does.
 - wave 2, next: the AirLift transport proper. `streaming_zip_conduit` staging, `atc` Books sync, AFC readback, canary verification, cleanup. Protocol notes are in `docs/PROTOCOL.md`.
+
+The built app is 4.0 MB (arm64), the IPA 1.2 MB. The idevice archive is dead-stripped down to the functions the app calls.
 
 ## requirements
 
