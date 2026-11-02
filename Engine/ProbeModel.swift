@@ -189,33 +189,51 @@ final class ProbeModel: ObservableObject {
     func probeZip() {
         guard !busy else { return }
         busy = true
-        log("探测 checkin 变体")
+        log("探测 StartService + Entitlement")
         Task.detached { [link] in
             do {
                 let shim = "com.apple.streaming_zip_conduit.shim.remote"
-                let plain = shim.replacingOccurrences(of: ".shim.remote", with: "")
-                guard let port = try link.port(of: shim) else { throw LinkError.shim("没有 zip shim") }
+                guard let service = try link.service(named: shim) else { throw LinkError.shim("没有 zip shim") }
+                let entitlement = service.entitlement
+                await MainActor.run { self.log("zip entitlement: \(entitlement.isEmpty ? "无" : entitlement)") }
                 let result = try link.withAdapter { adapter -> String in
-                    var variants: [(String, [String: Any])] = []
-                    let base: [String: Any] = ["Label": "airlift", "ProtocolVersion": 2, "Request": "RSDCheckin"]
-                    var a = base; a["Service"] = plain; variants.append(("service=plain", a))
-                    var b = base; b["Service"] = shim; variants.append(("service=shim", b))
-                    var c = base; c["Services"] = [shim]; variants.append(("services=[shim]", c))
-                    var d = base; d["Services"] = [plain]; variants.append(("services=[plain]", d))
-                    var report: [String] = []
-                    for (name, message) in variants {
-                        let stream = try ShimStream(adapter: adapter, port: port)
-                        try stream.send(try PlistFrame.encode(message))
-                        let reply = try stream.recvFrame()
-                        let text = PlistFrame.decode(reply).map { "\($0)" } ?? Hex.dump(reply)
-                        report.append("\(name): \(text)")
-                        stream.close()
+                    let stream = try ShimStream(adapter: adapter, port: service.port)
+                    defer { stream.close() }
+                    var checkin: [String: Any] = ["Label": "airlift", "ProtocolVersion": 2, "Request": "RSDCheckin"]
+                    try stream.send(try PlistFrame.encode(checkin))
+                    _ = try stream.recvFrame()
+                    checkin["Request"] = "StartService"
+                    checkin["Service"] = shim
+                    if !entitlement.isEmpty { checkin["Entitlement"] = entitlement }
+                    try stream.send(try PlistFrame.encode(checkin))
+                    let reply = try stream.recvFrame()
+                    guard let object = PlistFrame.decode(reply) as? [String: Any] else {
+                        return "start hex=\(Hex.dump(reply))"
                     }
-                    return report.joined(separator: " | ")
+                    if let rawPort = object["Port"] as? Int, rawPort > 0, rawPort < 65536 {
+                        let next = try ShimStream(adapter: adapter, port: UInt16(rawPort))
+                        defer { next.close() }
+                        let initMsg: [String: Any] = [
+                            "InstallOptionsDictionary": [
+                                "DisableDeltaTransfer": 1,
+                                "InstallDeltaTypeKey": "InstallDeltaTypeSparseIPAFiles",
+                                "IsUserInitiated": 1,
+                                "PackageType": "Customer",
+                                "PreferWifi": 1,
+                            ],
+                            "InstallTransferredDirectory": 1,
+                            "MediaSubdir": "PublicStaging/airlift-probe",
+                            "UserInitiatedTransfer": 0,
+                        ]
+                        try next.send(try PlistFrame.encode(initMsg))
+                        let ack = try next.recvFrame()
+                        return "start=\(object) port=\(rawPort) init=\(PlistFrame.decode(ack).map { "\($0)" } ?? Hex.dump(ack))"
+                    }
+                    return "start=\(object)"
                 }
-                await MainActor.run { self.log("checkin 变体: \(result)"); self.busy = false }
+                await MainActor.run { self.log("start 探测: \(result)"); self.busy = false }
             } catch {
-                await MainActor.run { self.log("checkin 变体失败: \(error.localizedDescription)"); self.busy = false }
+                await MainActor.run { self.log("start 探测失败: \(error.localizedDescription)"); self.busy = false }
             }
         }
     }

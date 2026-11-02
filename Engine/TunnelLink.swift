@@ -146,6 +146,10 @@ final class TunnelLink: @unchecked Sendable {
         try queue.sync { try servicesOnQueue().first { $0.name == service }?.port }
     }
 
+    func service(named name: String) throws -> RSDService? {
+        try queue.sync { try servicesOnQueue().first { $0.name == name } }
+    }
+
     func close() {
         queue.sync { closeOnQueue() }
     }
