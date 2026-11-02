@@ -189,49 +189,33 @@ final class ProbeModel: ObservableObject {
     func probeZip() {
         guard !busy else { return }
         busy = true
-        log("探测 zip: initTransfer 三种前置")
+        log("探测 checkin 变体")
         Task.detached { [link] in
             do {
                 let shim = "com.apple.streaming_zip_conduit.shim.remote"
+                let plain = shim.replacingOccurrences(of: ".shim.remote", with: "")
                 guard let port = try link.port(of: shim) else { throw LinkError.shim("没有 zip shim") }
                 let result = try link.withAdapter { adapter -> String in
-                    let initMsg: [String: Any] = [
-                        "InstallOptionsDictionary": [
-                            "DisableDeltaTransfer": 1,
-                            "InstallDeltaTypeKey": "InstallDeltaTypeSparseIPAFiles",
-                            "IsUserInitiated": 1,
-                            "PackageType": "Customer",
-                            "PreferWifi": 1,
-                        ],
-                        "InstallTransferredDirectory": 1,
-                        "MediaSubdir": "PublicStaging/airlift-probe",
-                        "UserInitiatedTransfer": 0,
-                    ]
+                    var variants: [(String, [String: Any])] = []
+                    let base: [String: Any] = ["Label": "airlift", "ProtocolVersion": 2, "Request": "RSDCheckin"]
+                    var a = base; a["Service"] = plain; variants.append(("service=plain", a))
+                    var b = base; b["Service"] = shim; variants.append(("service=shim", b))
+                    var c = base; c["Services"] = [shim]; variants.append(("services=[shim]", c))
+                    var d = base; d["Services"] = [plain]; variants.append(("services=[plain]", d))
                     var report: [String] = []
-                    for mode in 0..<3 {
+                    for (name, message) in variants {
                         let stream = try ShimStream(adapter: adapter, port: port)
-                        if mode >= 1 {
-                            var checkin: [String: Any] = ["Label": "airlift", "ProtocolVersion": 2, "Request": "RSDCheckin"]
-                            try stream.send(try PlistFrame.encode(checkin))
-                            _ = try stream.recvFrame()
-                            if mode == 2 {
-                                checkin["Request"] = "StartService"
-                                checkin["Service"] = shim
-                                try stream.send(try PlistFrame.encode(checkin))
-                                _ = try stream.recvFrame()
-                            }
-                        }
-                        try stream.send(try PlistFrame.encode(initMsg))
+                        try stream.send(try PlistFrame.encode(message))
                         let reply = try stream.recvFrame()
                         let text = PlistFrame.decode(reply).map { "\($0)" } ?? Hex.dump(reply)
-                        report.append(["init", "checkin+init", "start+init"][mode] + ": " + text)
+                        report.append("\(name): \(text)")
                         stream.close()
                     }
                     return report.joined(separator: " | ")
                 }
-                await MainActor.run { self.log("zip 探测: \(result)"); self.busy = false }
+                await MainActor.run { self.log("checkin 变体: \(result)"); self.busy = false }
             } catch {
-                await MainActor.run { self.log("zip 探测失败: \(error.localizedDescription)"); self.busy = false }
+                await MainActor.run { self.log("checkin 变体失败: \(error.localizedDescription)"); self.busy = false }
             }
         }
     }
