@@ -189,7 +189,7 @@ final class ProbeModel: ObservableObject {
     func probeZip() {
         guard !busy else { return }
         busy = true
-        log("探测 zip: go-ios initTransfer")
+        log("探测 zip: initTransfer 三种前置")
         Task.detached { [link] in
             do {
                 let shim = "com.apple.streaming_zip_conduit.shim.remote"
@@ -208,21 +208,23 @@ final class ProbeModel: ObservableObject {
                         "UserInitiatedTransfer": 0,
                     ]
                     var report: [String] = []
-                    for withStart in [false, true] {
+                    for mode in 0..<3 {
                         let stream = try ShimStream(adapter: adapter, port: port)
-                        var checkin: [String: Any] = ["Label": "airlift", "ProtocolVersion": 2, "Request": "RSDCheckin"]
-                        try stream.send(try PlistFrame.encode(checkin))
-                        _ = try stream.recvFrame()
-                        if withStart {
-                            checkin["Request"] = "StartService"
-                            checkin["Service"] = shim
+                        if mode >= 1 {
+                            var checkin: [String: Any] = ["Label": "airlift", "ProtocolVersion": 2, "Request": "RSDCheckin"]
                             try stream.send(try PlistFrame.encode(checkin))
                             _ = try stream.recvFrame()
+                            if mode == 2 {
+                                checkin["Request"] = "StartService"
+                                checkin["Service"] = shim
+                                try stream.send(try PlistFrame.encode(checkin))
+                                _ = try stream.recvFrame()
+                            }
                         }
                         try stream.send(try PlistFrame.encode(initMsg))
                         let reply = try stream.recvFrame()
                         let text = PlistFrame.decode(reply).map { "\($0)" } ?? Hex.dump(reply)
-                        report.append(withStart ? "start+init: \(text)" : "init: \(text)")
+                        report.append(["init", "checkin+init", "start+init"][mode] + ": " + text)
                         stream.close()
                     }
                     return report.joined(separator: " | ")
